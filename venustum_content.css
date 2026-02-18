@@ -101,7 +101,6 @@
 	border: none;
 	padding: 8px 12px;
 	border-radius: 4px;
-	cursor: pointer;
 	font-size: 13px;
 }
 
@@ -112,7 +111,6 @@
 .venustum-save-btn:disabled {
 	background: #f5f5f5;
 	color: #666;
-	cursor: default;
 }
 
 .venustum-close-btn {
@@ -120,7 +118,6 @@
 	border: 1px solid #ddd;
 	padding: 8px 12px;
 	border-radius: 4px;
-	cursor: pointer;
 	font-size: 13px;
 	color: #333;
 }
