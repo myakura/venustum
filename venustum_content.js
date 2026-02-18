@@ -349,61 +349,6 @@ function getSelectionInfo(selection) {
 	return { text, range };
 }
 
-/**
- * Gets the word under the cursor.
- * @param {MouseEvent} event
- * @returns {{text: string, range: Range} | null}
- */
-function getWordUnderCursor(event) {
-	if (!event.target) return null;
-	
-	const element = /** @type {Element} */ (event.target);
-	
-	// Only handle text nodes
-	if (element.nodeType !== Node.TEXT_NODE && !element.childNodes.length) {
-		return null;
-	}
-	
-	try {
-		const range = document.caretRangeFromPoint(event.clientX, event.clientY);
-		if (!range) return null;
-		
-		const textNode = range.startContainer;
-		if (textNode.nodeType !== Node.TEXT_NODE) return null;
-		
-		const text = textNode.textContent || '';
-		const offset = range.startOffset;
-		
-		// Find word boundaries
-		let start = offset;
-		let end = offset;
-		
-		const isWordChar = (/** @type {string} */ c) => /[a-zA-Z'-]/.test(c);
-		
-		while (start > 0 && isWordChar(text[start - 1])) {
-			start--;
-		}
-		
-		while (end < text.length && isWordChar(text[end])) {
-			end++;
-		}
-		
-		if (start === end) return null;
-		
-		const word = text.slice(start, end).trim();
-		if (!word || word.length < 2) return null;
-		
-		// Create a new range for the word
-		const wordRange = document.createRange();
-		wordRange.setStart(textNode, start);
-		wordRange.setEnd(textNode, end);
-		
-		return { text: word, range: wordRange };
-	} catch (error) {
-		return null;
-	}
-}
-
 // ============================================================================
 // Event Handlers
 // ============================================================================
@@ -412,9 +357,8 @@ let isProcessingSelection = false;
 
 /**
  * Handles text selection.
- * @param {Event} _event
  */
-async function handleSelection(_event) {
+async function handleSelection() {
 	if (isProcessingSelection) return;
 	isProcessingSelection = true;
 	
@@ -449,34 +393,6 @@ async function handleSelection(_event) {
 	}
 }
 
-/**
- * Handles double-click on words.
- * @param {MouseEvent} event
- */
-async function handleDoubleClick(event) {
-	const info = getWordUnderCursor(event);
-	
-	if (!info) return;
-	
-	const selection = window.getSelection();
-	selection?.removeAllRanges();
-	selection?.addRange(info.range);
-	
-	currentWord = info.text;
-	const sentence = extractSentence(info.range);
-	
-	const hasAnchor = highlightRange(info.range.cloneRange());
-	
-	showPopup(info.text, sentence, null, hasAnchor);
-	
-	const definition = await fetchDefinition(info.text.toLowerCase());
-	
-	if (popupElement) {
-		popupElement.innerHTML = createPopupContent(info.text, sentence, definition);
-		addPopupEventListeners(popupElement, info.text, sentence, definition);
-	}
-}
-
 // ============================================================================
 // Initialization
 // ============================================================================
@@ -486,12 +402,11 @@ async function handleDoubleClick(event) {
  */
 function initialize() {
 	let selectionTimeout = null;
-	document.addEventListener('mouseup', () => {
-		if (selectionTimeout) clearTimeout(selectionTimeout);
-		selectionTimeout = setTimeout(() => handleSelection(null), 100);
-	});
 	
-	document.addEventListener('dblclick', handleDoubleClick);
+	document.addEventListener('selectionchange', () => {
+		if (selectionTimeout) clearTimeout(selectionTimeout);
+		selectionTimeout = setTimeout(handleSelection, 100);
+	});
 	
 	console.log(`${EXTENSION_ID}: content script loaded`);
 }
