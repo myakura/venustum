@@ -1,7 +1,7 @@
 {
 	"manifest_version": 3,
 	"name": "Venustum",
-	"version": "0.1.4",
+	"version": "0.1.5",
 	"description": "English learning extension - select words to get definitions and save them",
 	"icons": {
 		"48": "icons/icon_gray.png",
@@ -40,7 +40,7 @@
 	],
 	"browser_specific_settings": {
 		"gecko": {
-			"id": "{a1b2c3d4-e5f6-7890-abcd-ef1234567890}",
+			"id": "{85d0404e-e022-46c6-98b1-87e754ba1339}",
 			"strict_min_version": "125.0"
 		}
 	}
