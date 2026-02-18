@@ -1,0 +1,707 @@
+'use strict';
+
+/**
+ * @file content script for Venustum
+ */
+
+const EXTENSION_ID = 'venustum';
+
+// ============================================================================
+// Types
+// ============================================================================
+
+/**
+ * @typedef {Object} SavedEntry
+ * @property {string} id
+ * @property {string} word
+ * @property {string} sentence
+ * @property {string} definition
+ * @property {string} partOfSpeech
+ * @property {string} phonetic
+ * @property {string} sourceUrl
+ * @property {string} sourceTitle
+ * @property {number} createdAt
+ */
+
+/**
+ * @typedef {Object} DictionaryResponse
+ * @property {string} word
+ * @property {string} phonetic
+ * @property {Meaning[]} meanings
+ */
+
+/**
+ * @typedef {Object} Meaning
+ * @property {string} partOfSpeech
+ * @property {Definition[]} definitions
+ */
+
+/**
+ * @typedef {Object} Definition
+ * @property {string} definition
+ * @property {string} example
+ */
+
+// ============================================================================
+// State
+// ============================================================================
+
+/** @type {string | null} */
+let currentWord = null;
+/** @type {Range | null} */
+let currentRange = null;
+/** @type {HTMLElement | null} */
+let highlightElement = null;
+/** @type {HTMLElement | null} */
+let popupElement = null;
+
+// ============================================================================
+// Sentence Extraction
+// ============================================================================
+
+/**
+ * Extracts the sentence containing the given range.
+ * @param {Range} range
+ * @returns {string}
+ */
+function extractSentence(range) {
+	const container = range.commonAncestorContainer;
+	const textContent = container.textContent || '';
+	
+	const startNode = range.startContainer;
+	const startOffset = range.startOffset;
+	const endNode = range.endContainer;
+	const endOffset = range.endOffset;
+	
+	// Get the full text and find boundaries
+	let text = '';
+	let startIdx = 0;
+	let endIdx = 0;
+	
+	if (startNode === endNode && startNode.nodeType === Node.TEXT_NODE) {
+		text = startNode.textContent || '';
+		startIdx = findSentenceStart(text, startOffset);
+		endIdx = findSentenceEnd(text, endOffset);
+		return text.slice(startIdx, endIdx).trim();
+	}
+	
+	// For complex selections, get parent element's text
+	const parent = container.nodeType === Node.TEXT_NODE 
+		? container.parentElement 
+		: container;
+	
+	if (parent) {
+		const walker = document.createTreeWalker(
+			parent,
+			NodeFilter.SHOW_TEXT,
+			null
+		);
+		
+		let foundStart = false;
+		let foundSelection = false;
+		let beforeText = '';
+		let selectedText = '';
+		let afterText = '';
+		
+		while (walker.nextNode()) {
+			const node = walker.currentNode;
+			
+			if (node === startNode) {
+				foundStart = true;
+				beforeText = (node.textContent || '').slice(0, startOffset);
+				selectedText = (node.textContent || '').slice(startOffset);
+				if (node === endNode) {
+					selectedText = (node.textContent || '').slice(startOffset, endOffset);
+					afterText = (node.textContent || '').slice(endOffset);
+					foundSelection = true;
+				}
+			} else if (node === endNode && foundStart) {
+				selectedText += (node.textContent || '').slice(0, endOffset);
+				afterText = (node.textContent || '').slice(endOffset);
+				foundSelection = true;
+			} else if (!foundStart) {
+				beforeText += node.textContent || '';
+			} else if (foundStart && !foundSelection) {
+				selectedText += node.textContent || '';
+			} else if (foundSelection) {
+				afterText += node.textContent || '';
+			}
+		}
+		
+		// Find sentence boundaries
+		const sentenceStart = findSentenceStart(beforeText, beforeText.length) + beforeText.length;
+		const sentenceEnd = findSentenceEnd(afterText, 0);
+		
+		text = beforeText + selectedText + afterText;
+		startIdx = sentenceStart;
+		endIdx = beforeText.length + selectedText.length + sentenceEnd;
+		
+		return text.slice(startIdx, endIdx).trim();
+	}
+	
+	return range.toString().trim();
+}
+
+/**
+ * Finds the start of a sentence from a given position.
+ * @param {string} text
+ * @param {number} offset
+ * @returns {number}
+ */
+function findSentenceStart(text, offset) {
+	const sentenceEnders = /[.!?]/;
+	let pos = offset;
+	
+	while (pos > 0) {
+		if (sentenceEnders.test(text[pos - 1])) {
+			// Skip whitespace after the period
+			while (pos < text.length && /\s/.test(text[pos])) {
+				pos++;
+			}
+			return pos;
+		}
+		pos--;
+	}
+	
+	return 0;
+}
+
+/**
+ * Finds the end of a sentence from a given position.
+ * @param {string} text
+ * @param {number} offset
+ * @returns {number}
+ */
+function findSentenceEnd(text, offset) {
+	const sentenceEnders = /[.!?]/;
+	let pos = offset;
+	
+	while (pos < text.length) {
+		if (sentenceEnders.test(text[pos])) {
+			return pos + 1;
+		}
+		pos++;
+	}
+	
+	return text.length;
+}
+
+// ============================================================================
+// Highlighting
+// ============================================================================
+
+/**
+ * Highlights the range containing the selected text.
+ * @param {Range} range
+ */
+function highlightRange(range) {
+	clearHighlight();
+	
+	try {
+		highlightElement = document.createElement('span');
+		highlightElement.className = `${EXTENSION_ID}-highlight`;
+		highlightElement.style.backgroundColor = 'rgba(255, 235, 59, 0.4)';
+		highlightElement.style.borderRadius = '2px';
+		highlightElement.style.transition = 'background-color 0.2s';
+		
+		range.surroundContents(highlightElement);
+		currentRange = range;
+	} catch (error) {
+		// Range spans multiple elements - use CSS highlight instead
+		console.log(`${EXTENSION_ID}: cannot surround contents, using fallback`);
+		highlightElement = null;
+	}
+}
+
+/**
+ * Clears the current highlight.
+ */
+function clearHighlight() {
+	if (highlightElement && highlightElement.parentNode) {
+		const parent = highlightElement.parentNode;
+		while (highlightElement.firstChild) {
+			parent.insertBefore(highlightElement.firstChild, highlightElement);
+		}
+		parent.removeChild(highlightElement);
+	}
+	highlightElement = null;
+	currentRange = null;
+}
+
+// ============================================================================
+// Popup UI
+// ============================================================================
+
+/**
+ * Creates and shows the explanation popup.
+ * @param {string} word
+ * @param {string} sentence
+ * @param {DictionaryResponse | null} definition
+ * @param {{x: number, y: number}} position
+ */
+function showPopup(word, sentence, definition, position) {
+	hidePopup();
+	
+	popupElement = document.createElement('div');
+	popupElement.className = `${EXTENSION_ID}-popup`;
+	popupElement.innerHTML = createPopupContent(word, sentence, definition);
+	
+	// Apply styles
+	Object.assign(popupElement.style, {
+		position: 'absolute',
+		left: `${position.x}px`,
+		top: `${position.y + 20}px`,
+		maxWidth: '400px',
+		background: '#fff',
+		border: '1px solid #ddd',
+		borderRadius: '8px',
+		boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+		padding: '12px',
+		fontFamily: 'system-ui, -apple-system, sans-serif',
+		fontSize: '14px',
+		zIndex: '2147483647',
+		lineHeight: '1.5',
+	});
+	
+	// Add custom styles for popup content
+	const style = popupElement.querySelector('style');
+	if (style) {
+		document.head.appendChild(style);
+	}
+	
+	document.body.appendChild(popupElement);
+	
+	// Adjust position if popup goes off screen
+	adjustPopupPosition(popupElement);
+	
+	// Add event listeners
+	addPopupEventListeners(popupElement, word, sentence, definition);
+}
+
+/**
+ * Creates the popup HTML content.
+ * @param {string} word
+ * @param {string} sentence
+ * @param {DictionaryResponse | null} definition
+ * @returns {string}
+ */
+function createPopupContent(word, sentence, definition) {
+	const escapedWord = escapeHtml(word);
+	const escapedSentence = escapeHtml(sentence);
+	
+	let definitionHtml = '<p style="color: #666; margin: 8px 0;">Loading definition...</p>';
+	
+	if (definition) {
+		definitionHtml = definition.meanings.map(meaning => {
+			const defs = meaning.definitions.slice(0, 2).map((def, i) => {
+				let html = `<div style="margin: 4px 0;">
+					<span style="color: #666;">${i + 1}.</span> ${escapeHtml(def.definition)}
+				</div>`;
+				if (def.example) {
+					html += `<div style="margin-left: 16px; color: #888; font-style: italic;">
+						"${escapeHtml(def.example)}"
+					</div>`;
+				}
+				return html;
+			}).join('');
+			
+			return `<div style="margin: 8px 0;">
+				<span style="background: #e3f2fd; padding: 2px 6px; border-radius: 4px; font-size: 12px;">
+					${escapeHtml(meaning.partOfSpeech)}
+				</span>
+				${defs}
+			</div>`;
+		}).join('');
+	}
+	
+	const phonetic = definition?.phonetic || '';
+	
+	return `
+		<div style="margin-bottom: 8px;">
+			<span style="font-size: 18px; font-weight: 600;">${escapedWord}</span>
+			${phonetic ? `<span style="color: #666; margin-left: 8px;">${escapeHtml(phonetic)}</span>` : ''}
+		</div>
+		<div style="margin-bottom: 12px;">
+			${definitionHtml}
+		</div>
+		<div style="background: #f5f5f5; padding: 8px; border-radius: 4px; font-size: 13px; margin-bottom: 12px;">
+			${escapedSentence}
+		</div>
+		<div style="display: flex; gap: 8px;">
+			<button class="${EXTENSION_ID}-save-btn" style="
+				flex: 1;
+				background: #1976d2;
+				color: white;
+				border: none;
+				padding: 8px 12px;
+				border-radius: 4px;
+				cursor: pointer;
+				font-size: 13px;
+			">Save to vocabulary</button>
+			<button class="${EXTENSION_ID}-close-btn" style="
+				background: #f5f5f5;
+				border: 1px solid #ddd;
+				padding: 8px 12px;
+				border-radius: 4px;
+				cursor: pointer;
+				font-size: 13px;
+			">Close</button>
+		</div>
+	`;
+}
+
+/**
+ * Adds event listeners to popup elements.
+ * @param {HTMLElement} popup
+ * @param {string} word
+ * @param {string} sentence
+ * @param {DictionaryResponse | null} definition
+ */
+function addPopupEventListeners(popup, word, sentence, definition) {
+	const saveBtn = popup.querySelector(`.${EXTENSION_ID}-save-btn`);
+	const closeBtn = popup.querySelector(`.${EXTENSION_ID}-close-btn`);
+	
+	if (saveBtn) {
+		saveBtn.addEventListener('click', () => {
+			saveEntry(word, sentence, definition);
+			saveBtn.textContent = 'Saved!';
+			saveBtn.style.background = '#4caf50';
+			saveBtn.disabled = true;
+		});
+	}
+	
+	if (closeBtn) {
+		closeBtn.addEventListener('click', () => {
+			hidePopup();
+			clearHighlight();
+		});
+	}
+}
+
+/**
+ * Adjusts popup position to stay within viewport.
+ * @param {HTMLElement} popup
+ */
+function adjustPopupPosition(popup) {
+	const rect = popup.getBoundingClientRect();
+	const viewportWidth = window.innerWidth;
+	const viewportHeight = window.innerHeight;
+	
+	if (rect.right > viewportWidth - 10) {
+		popup.style.left = `${viewportWidth - rect.width - 10}px`;
+	}
+	
+	if (rect.bottom > viewportHeight - 10) {
+		popup.style.top = `${parseFloat(popup.style.top) - rect.height - 40}px`;
+	}
+}
+
+/**
+ * Hides and removes the popup.
+ */
+function hidePopup() {
+	if (popupElement && popupElement.parentNode) {
+		popupElement.parentNode.removeChild(popupElement);
+	}
+	popupElement = null;
+}
+
+// ============================================================================
+// Data Operations
+// ============================================================================
+
+/**
+ * Saves an entry to storage.
+ * @param {string} word
+ * @param {string} sentence
+ * @param {DictionaryResponse | null} definition
+ */
+async function saveEntry(word, sentence, definition) {
+	/** @type {SavedEntry} */
+	const entry = {
+		id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+		word: word,
+		sentence: sentence,
+		definition: definition?.meanings[0]?.definitions[0]?.definition || '',
+		partOfSpeech: definition?.meanings[0]?.partOfSpeech || '',
+		phonetic: definition?.phonetic || '',
+		sourceUrl: location.href,
+		sourceTitle: document.title,
+		createdAt: Date.now(),
+	};
+	
+	try {
+		const response = await chrome.runtime.sendMessage({
+			action: 'save-entry',
+			entry: entry,
+		});
+		
+		if (response?.success) {
+			console.log(`${EXTENSION_ID}: entry saved`, entry.id);
+		}
+	} catch (error) {
+		console.error(`${EXTENSION_ID}: failed to save entry`, error);
+	}
+}
+
+/**
+ * Fetches definition from dictionary API via background script.
+ * @param {string} word
+ * @returns {Promise<DictionaryResponse | null>}
+ */
+async function fetchDefinition(word) {
+	try {
+		const response = await chrome.runtime.sendMessage({
+			action: 'fetch-definition',
+			word: word,
+		});
+		return response?.definition || null;
+	} catch (error) {
+		console.error(`${EXTENSION_ID}: failed to fetch definition`, error);
+		return null;
+	}
+}
+
+// ============================================================================
+// Utilities
+// ============================================================================
+
+/**
+ * Escapes HTML special characters.
+ * @param {string} str
+ * @returns {string}
+ */
+function escapeHtml(str) {
+	const div = document.createElement('div');
+	div.textContent = str;
+	return div.innerHTML;
+}
+
+/**
+ * Gets the selected text from a selection event.
+ * @param {Selection} selection
+ * @returns {{text: string, range: Range} | null}
+ */
+function getSelectionInfo(selection) {
+	if (!selection || selection.rangeCount === 0) return null;
+	
+	const range = selection.getRangeAt(0);
+	const text = range.toString().trim();
+	
+	if (!text) return null;
+	
+	return { text, range };
+}
+
+/**
+ * Gets the word under the cursor.
+ * @param {MouseEvent} event
+ * @returns {{text: string, range: Range} | null}
+ */
+function getWordUnderCursor(event) {
+	if (!event.target) return null;
+	
+	const element = /** @type {Element} */ (event.target);
+	
+	// Only handle text nodes
+	if (element.nodeType !== Node.TEXT_NODE && !element.childNodes.length) {
+		return null;
+	}
+	
+	try {
+		const range = document.caretRangeFromPoint(event.clientX, event.clientY);
+		if (!range) return null;
+		
+		const textNode = range.startContainer;
+		if (textNode.nodeType !== Node.TEXT_NODE) return null;
+		
+		const text = textNode.textContent || '';
+		const offset = range.startOffset;
+		
+		// Find word boundaries
+		let start = offset;
+		let end = offset;
+		
+		const isWordChar = (/** @type {string} */ c) => /[a-zA-Z'-]/.test(c);
+		
+		while (start > 0 && isWordChar(text[start - 1])) {
+			start--;
+		}
+		
+		while (end < text.length && isWordChar(text[end])) {
+			end++;
+		}
+		
+		if (start === end) return null;
+		
+		const word = text.slice(start, end).trim();
+		if (!word || word.length < 2) return null;
+		
+		// Create a new range for the word
+		const wordRange = document.createRange();
+		wordRange.setStart(textNode, start);
+		wordRange.setEnd(textNode, end);
+		
+		return { text: word, range: wordRange };
+	} catch (error) {
+		return null;
+	}
+}
+
+// ============================================================================
+// Event Handlers
+// ============================================================================
+
+let isProcessingSelection = false;
+
+/**
+ * Handles text selection.
+ * @param {Event} _event
+ */
+async function handleSelection(_event) {
+	if (isProcessingSelection) return;
+	isProcessingSelection = true;
+	
+	try {
+		const selection = window.getSelection();
+		const info = getSelectionInfo(selection);
+		
+		if (!info) {
+			hidePopup();
+			clearHighlight();
+			currentWord = null;
+			return;
+		}
+		
+		// Don't re-process the same word
+		if (info.text === currentWord) return;
+		
+		currentWord = info.text;
+		const sentence = extractSentence(info.range);
+		
+		// Highlight the selection
+		highlightRange(info.range.cloneRange());
+		
+		// Get position for popup
+		const rect = info.range.getBoundingClientRect();
+		const position = {
+			x: rect.left + window.scrollX,
+			y: rect.bottom + window.scrollY,
+		};
+		
+		// Show popup with loading state
+		showPopup(info.text, sentence, null, position);
+		
+		// Fetch definition
+		const definition = await fetchDefinition(info.text.toLowerCase());
+		
+		// Update popup with definition
+		if (popupElement) {
+			popupElement.innerHTML = createPopupContent(info.text, sentence, definition);
+			addPopupEventListeners(popupElement, info.text, sentence, definition);
+			adjustPopupPosition(popupElement);
+		}
+	} finally {
+		isProcessingSelection = false;
+	}
+}
+
+/**
+ * Handles double-click on words.
+ * @param {MouseEvent} event
+ */
+async function handleDoubleClick(event) {
+	const info = getWordUnderCursor(event);
+	
+	if (!info) return;
+	
+	// Clear any existing selection
+	const selection = window.getSelection();
+	selection?.removeAllRanges();
+	selection?.addRange(info.range);
+	
+	currentWord = info.text;
+	const sentence = extractSentence(info.range);
+	
+	// Highlight the word
+	highlightRange(info.range.cloneRange());
+	
+	// Get position for popup
+	const rect = info.range.getBoundingClientRect();
+	const position = {
+		x: rect.left + window.scrollX,
+		y: rect.bottom + window.scrollY,
+	};
+	
+	// Show popup with loading state
+	showPopup(info.text, sentence, null, position);
+	
+	// Fetch definition
+	const definition = await fetchDefinition(info.text.toLowerCase());
+	
+	// Update popup with definition
+	if (popupElement) {
+		popupElement.innerHTML = createPopupContent(info.text, sentence, definition);
+		addPopupEventListeners(popupElement, info.text, sentence, definition);
+		adjustPopupPosition(popupElement);
+	}
+}
+
+/**
+ * Handles click events to close popup.
+ * @param {MouseEvent} event
+ */
+function handleClick(event) {
+	const target = /** @type {Element} */ (event.target);
+	
+	// Don't close if clicking inside popup
+	if (popupElement && popupElement.contains(target)) return;
+	
+	// Don't close if clicking on highlight
+	if (highlightElement && highlightElement.contains(target)) return;
+	
+	hidePopup();
+	clearHighlight();
+	currentWord = null;
+}
+
+/**
+ * Handles escape key to close popup.
+ * @param {KeyboardEvent} event
+ */
+function handleKeydown(event) {
+	if (event.key === 'Escape') {
+		hidePopup();
+		clearHighlight();
+		currentWord = null;
+	}
+}
+
+// ============================================================================
+// Initialization
+// ============================================================================
+
+/**
+ * Initializes the content script.
+ */
+function initialize() {
+	// Use mouseup for selection (with debounce)
+	let selectionTimeout = null;
+	document.addEventListener('mouseup', () => {
+		if (selectionTimeout) clearTimeout(selectionTimeout);
+		selectionTimeout = setTimeout(() => handleSelection(null), 100);
+	});
+	
+	// Double-click for single words
+	document.addEventListener('dblclick', handleDoubleClick);
+	
+	// Click to close popup
+	document.addEventListener('click', handleClick);
+	
+	// Escape to close popup
+	document.addEventListener('keydown', handleKeydown);
+	
+	console.log(`${EXTENSION_ID}: content script loaded`);
+}
+
+initialize();

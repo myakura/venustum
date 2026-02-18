@@ -1,0 +1,178 @@
+* {
+	box-sizing: border-box;
+	margin: 0;
+	padding: 0;
+}
+
+body {
+	font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+	font-size: 13px;
+	line-height: 1.4;
+	color: #333;
+	background: #f5f5f5;
+	width: 360px;
+	max-height: 480px;
+}
+
+.container {
+	display: flex;
+	flex-direction: column;
+	max-height: 480px;
+}
+
+.header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 12px 16px;
+	background: #1976d2;
+	color: white;
+}
+
+.title {
+	font-size: 16px;
+	font-weight: 600;
+}
+
+.count {
+	font-size: 12px;
+	opacity: 0.9;
+}
+
+.controls {
+	display: flex;
+	justify-content: flex-end;
+	padding: 8px 16px;
+	background: #fff;
+	border-bottom: 1px solid #e0e0e0;
+}
+
+.btn {
+	padding: 6px 12px;
+	border: none;
+	border-radius: 4px;
+	font-size: 12px;
+	cursor: pointer;
+	transition: background 0.2s;
+}
+
+.btn:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+.btn-danger {
+	background: #ffebee;
+	color: #c62828;
+}
+
+.btn-danger:hover:not(:disabled) {
+	background: #ffcdd2;
+}
+
+.entries {
+	flex: 1;
+	overflow-y: auto;
+	background: #fff;
+}
+
+.entry {
+	padding: 12px 16px;
+	border-bottom: 1px solid #e0e0e0;
+	cursor: pointer;
+	transition: background 0.2s;
+}
+
+.entry:hover {
+	background: #f5f5f5;
+}
+
+.entry:last-child {
+	border-bottom: none;
+}
+
+.entry-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: flex-start;
+	margin-bottom: 4px;
+}
+
+.entry-word {
+	font-size: 14px;
+	font-weight: 600;
+	color: #1976d2;
+}
+
+.entry-pos {
+	font-size: 11px;
+	background: #e3f2fd;
+	padding: 2px 6px;
+	border-radius: 4px;
+	color: #1565c0;
+	margin-left: 8px;
+}
+
+.entry-delete {
+	padding: 4px;
+	background: none;
+	border: none;
+	color: #999;
+	cursor: pointer;
+	border-radius: 4px;
+	opacity: 0;
+	transition: opacity 0.2s;
+}
+
+.entry:hover .entry-delete {
+	opacity: 1;
+}
+
+.entry-delete:hover {
+	background: #ffebee;
+	color: #c62828;
+}
+
+.entry-definition {
+	color: #555;
+	margin-bottom: 6px;
+	font-size: 12px;
+}
+
+.entry-sentence {
+	font-size: 11px;
+	color: #888;
+	background: #fafafa;
+	padding: 6px 8px;
+	border-radius: 4px;
+	border-left: 2px solid #1976d2;
+	margin-bottom: 6px;
+}
+
+.entry-meta {
+	font-size: 10px;
+	color: #aaa;
+	display: flex;
+	justify-content: space-between;
+}
+
+.empty-state {
+	padding: 40px 20px;
+	text-align: center;
+	color: #666;
+}
+
+.empty-state p {
+	margin-bottom: 8px;
+}
+
+.empty-state .hint {
+	font-size: 11px;
+	color: #999;
+}
+
+.loading {
+	padding: 40px 20px;
+	text-align: center;
+	color: #999;
+}

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Venustum</title>
+	<link rel="stylesheet" href="popup.css">
+</head>
+<body>
+	<div class="container">
+		<header class="header">
+			<h1 class="title">Venustum</h1>
+			<span class="count" id="entry-count">0 entries</span>
+		</header>
+		
+		<div class="controls">
+			<button id="clear-btn" class="btn btn-danger" disabled>Clear All</button>
+		</div>
+		
+		<div class="entries" id="entries">
+			<div class="loading">Loading...</div>
+		</div>
+		
+		<div class="empty-state" id="empty-state" style="display: none;">
+			<p>No saved words yet.</p>
+			<p class="hint">Select text on a webpage to get started.</p>
+		</div>
+	</div>
+	
+	<script src="popup.js"></script>
+</body>
+</html>
