@@ -192,7 +192,7 @@ function findSentenceEnd(text, offset) {
 
 /**
  * Highlights the range containing the selected text.
- * @param {Range} range
+ * @returns {boolean} True if highlight was created successfully
  */
 function highlightRange(range) {
 	clearHighlight();
@@ -200,12 +200,15 @@ function highlightRange(range) {
 	try {
 		highlightElement = document.createElement('span');
 		highlightElement.className = `${EXTENSION_ID}-highlight`;
+		highlightElement.style.anchorName = '--venustum-selection';
 		
 		range.surroundContents(highlightElement);
 		currentRange = range;
+		return true;
 	} catch (error) {
-		console.log(`${EXTENSION_ID}: cannot surround contents, using fallback`);
+		console.log(`${EXTENSION_ID}: cannot surround contents`);
 		highlightElement = null;
+		return false;
 	}
 }
 
@@ -233,20 +236,17 @@ function clearHighlight() {
  * @param {string} word
  * @param {string} sentence
  * @param {DictionaryResponse | null} definition
- * @param {DOMRect} selectionRect
+ * @param {boolean} hasAnchor
  */
-function showPopup(word, sentence, definition, selectionRect) {
+function showPopup(word, sentence, definition, hasAnchor) {
 	hidePopup();
 	
 	popupElement = document.createElement('div');
-	popupElement.className = `${EXTENSION_ID}-popup`;
+	popupElement.className = `${EXTENSION_ID}-popup${hasAnchor ? '' : '-fallback'}`;
 	popupElement.setAttribute('popover', 'auto');
 	popupElement.innerHTML = createPopupContent(word, sentence, definition);
 	
 	document.body.appendChild(popupElement);
-	
-	positionPopup(popupElement, selectionRect);
-	
 	popupElement.showPopover();
 	
 	addPopupEventListeners(popupElement, word, sentence, definition);
@@ -337,47 +337,6 @@ function addPopupEventListeners(popup, word, sentence, definition) {
 			currentWord = null;
 		}
 	});
-}
-
-/**
- * Positions the popup relative to the selection.
- * @param {HTMLElement} popup
- * @param {DOMRect} selectionRect
- */
-function positionPopup(popup, selectionRect) {
-	const viewportWidth = window.innerWidth;
-	const viewportHeight = window.innerHeight;
-	
-	let left = selectionRect.left;
-	let top = selectionRect.bottom + 8;
-	
-	popup.style.left = `${left}px`;
-	popup.style.top = `${top}px`;
-	
-	const rect = popup.getBoundingClientRect();
-	
-	if (rect.right > viewportWidth - 10) {
-		popup.style.left = `${viewportWidth - rect.width - 10}px`;
-	}
-	
-	if (rect.bottom > viewportHeight - 10) {
-		popup.style.top = `${selectionRect.top - rect.height - 8}px`;
-	}
-}
-
-/**
- * Hides and removes the popup.
- */
-function hidePopup() {
-	if (popupElement) {
-		if (popupElement.matches(':popover-open')) {
-			popupElement.hidePopover();
-		}
-		if (popupElement.parentNode) {
-			popupElement.parentNode.removeChild(popupElement);
-		}
-	}
-	popupElement = null;
 }
 
 // ============================================================================
@@ -552,18 +511,15 @@ async function handleSelection(_event) {
 		currentWord = info.text;
 		const sentence = extractSentence(info.range);
 		
-		highlightRange(info.range.cloneRange());
+		const hasAnchor = highlightRange(info.range.cloneRange());
 		
-		const rect = info.range.getBoundingClientRect();
-		
-		showPopup(info.text, sentence, null, rect);
+		showPopup(info.text, sentence, null, hasAnchor);
 		
 		const definition = await fetchDefinition(info.text.toLowerCase());
 		
 		if (popupElement) {
 			popupElement.innerHTML = createPopupContent(info.text, sentence, definition);
 			addPopupEventListeners(popupElement, info.text, sentence, definition);
-			positionPopup(popupElement, rect);
 		}
 	} finally {
 		isProcessingSelection = false;
@@ -586,18 +542,15 @@ async function handleDoubleClick(event) {
 	currentWord = info.text;
 	const sentence = extractSentence(info.range);
 	
-	highlightRange(info.range.cloneRange());
+	const hasAnchor = highlightRange(info.range.cloneRange());
 	
-	const rect = info.range.getBoundingClientRect();
-	
-	showPopup(info.text, sentence, null, rect);
+	showPopup(info.text, sentence, null, hasAnchor);
 	
 	const definition = await fetchDefinition(info.text.toLowerCase());
 	
 	if (popupElement) {
 		popupElement.innerHTML = createPopupContent(info.text, sentence, definition);
 		addPopupEventListeners(popupElement, info.text, sentence, definition);
-		positionPopup(popupElement, rect);
 	}
 }
 

@@ -5,6 +5,28 @@
 }
 
 .venustum-popup {
+	position: fixed;
+	position-anchor: --venustum-selection;
+	top: anchor(bottom);
+	left: anchor(left);
+	position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;
+	max-width: 400px;
+	background: #fff;
+	border: 1px solid #ddd;
+	border-radius: 8px;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+	padding: 12px;
+	font-family: system-ui, -apple-system, sans-serif;
+	font-size: 14px;
+	line-height: 1.5;
+	margin: 0;
+}
+
+.venustum-popup-fallback {
+	position: fixed;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
 	max-width: 400px;
 	background: #fff;
 	border: 1px solid #ddd;
