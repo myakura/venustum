@@ -1,7 +1,7 @@
 {
 	"manifest_version": 3,
 	"name": "Venustum",
-	"version": "0.2.4",
+	"version": "0.2.5",
 	"description": "English learning extension - select words to get definitions and save them",
 	"icons": {
 		"48": "icons/icon_gray.png",

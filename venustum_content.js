@@ -354,6 +354,9 @@ function getSelectionInfo(selection) {
 // ============================================================================
 
 let isProcessingSelection = false;
+let isPointerDown = false;
+let pendingSelectionInfo = null;
+let lastPopupTime = 0;
 
 /**
  * Handles text selection.
@@ -367,29 +370,46 @@ async function handleSelection() {
 		const info = getSelectionInfo(selection);
 		
 		if (!info) {
-			hidePopup();
-			clearHighlight();
-			currentWord = null;
+			if (Date.now() - lastPopupTime > 300) {
+				hidePopup();
+				clearHighlight();
+				currentWord = null;
+			}
+			pendingSelectionInfo = null;
 			return;
 		}
 		
 		if (info.text === currentWord) return;
 		
-		currentWord = info.text;
-		const sentence = extractSentence(info.range);
-		
-		const hasAnchor = highlightRange(info.range.cloneRange());
-		
-		showPopup(info.text, sentence, null, hasAnchor);
-		
-		const definition = await fetchDefinition(info.text.toLowerCase());
-		
-		if (popupElement) {
-			popupElement.innerHTML = createPopupContent(info.text, sentence, definition);
-			addPopupEventListeners(popupElement, info.text, sentence, definition);
+		if (isPointerDown) {
+			pendingSelectionInfo = info;
+			return;
 		}
+		
+		await showSelectionPopup(info);
 	} finally {
 		isProcessingSelection = false;
+	}
+}
+
+/**
+ * Shows popup for the given selection info.
+ * @param {{text: string, range: Range}} info
+ */
+async function showSelectionPopup(info) {
+	currentWord = info.text;
+	lastPopupTime = Date.now();
+	const sentence = extractSentence(info.range);
+	
+	const hasAnchor = highlightRange(info.range.cloneRange());
+	
+	showPopup(info.text, sentence, null, hasAnchor);
+	
+	const definition = await fetchDefinition(info.text.toLowerCase());
+	
+	if (popupElement) {
+		popupElement.innerHTML = createPopupContent(info.text, sentence, definition);
+		addPopupEventListeners(popupElement, info.text, sentence, definition);
 	}
 }
 
@@ -402,10 +422,30 @@ async function handleSelection() {
  */
 function initialize() {
 	let selectionTimeout = null;
+	let popupTimeout = null;
+	
+	document.addEventListener('pointerdown', () => {
+		isPointerDown = true;
+		if (popupTimeout) clearTimeout(popupTimeout);
+	});
+	
+	document.addEventListener('pointerup', () => {
+		isPointerDown = false;
+		
+		if (pendingSelectionInfo) {
+			const info = pendingSelectionInfo;
+			popupTimeout = setTimeout(() => {
+				if (pendingSelectionInfo === info) {
+					pendingSelectionInfo = null;
+					showSelectionPopup(info);
+				}
+			}, 80);
+		}
+	});
 	
 	document.addEventListener('selectionchange', () => {
 		if (selectionTimeout) clearTimeout(selectionTimeout);
-		selectionTimeout = setTimeout(handleSelection, 100);
+		selectionTimeout = setTimeout(handleSelection, 50);
 	});
 	
 	console.log(`${EXTENSION_ID}: content script loaded`);
