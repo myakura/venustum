@@ -6,6 +6,8 @@
 
 const EXTENSION_ID = 'venustum';
 
+const sentenceSegmenter = new Intl.Segmenter('en', { granularity: 'sentence' });
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -60,130 +62,36 @@ let popupElement = null;
 // ============================================================================
 
 /**
- * Extracts the sentence containing the given range.
+ * Extracts the sentence containing the given range using Intl.Segmenter.
  * @param {Range} range
  * @returns {string}
  */
 function extractSentence(range) {
 	const container = range.commonAncestorContainer;
-	const textContent = container.textContent || '';
-	
-	const startNode = range.startContainer;
-	const startOffset = range.startOffset;
-	const endNode = range.endContainer;
-	const endOffset = range.endOffset;
-	
-	// Get the full text and find boundaries
-	let text = '';
-	let startIdx = 0;
-	let endIdx = 0;
-	
-	if (startNode === endNode && startNode.nodeType === Node.TEXT_NODE) {
-		text = startNode.textContent || '';
-		startIdx = findSentenceStart(text, startOffset);
-		endIdx = findSentenceEnd(text, endOffset);
-		return text.slice(startIdx, endIdx).trim();
-	}
-	
-	// For complex selections, get parent element's text
 	const parent = container.nodeType === Node.TEXT_NODE 
 		? container.parentElement 
 		: container;
 	
-	if (parent) {
-		const walker = document.createTreeWalker(
-			parent,
-			NodeFilter.SHOW_TEXT,
-			null
-		);
-		
-		let foundStart = false;
-		let foundSelection = false;
-		let beforeText = '';
-		let selectedText = '';
-		let afterText = '';
-		
-		while (walker.nextNode()) {
-			const node = walker.currentNode;
-			
-			if (node === startNode) {
-				foundStart = true;
-				beforeText = (node.textContent || '').slice(0, startOffset);
-				selectedText = (node.textContent || '').slice(startOffset);
-				if (node === endNode) {
-					selectedText = (node.textContent || '').slice(startOffset, endOffset);
-					afterText = (node.textContent || '').slice(endOffset);
-					foundSelection = true;
-				}
-			} else if (node === endNode && foundStart) {
-				selectedText += (node.textContent || '').slice(0, endOffset);
-				afterText = (node.textContent || '').slice(endOffset);
-				foundSelection = true;
-			} else if (!foundStart) {
-				beforeText += node.textContent || '';
-			} else if (foundStart && !foundSelection) {
-				selectedText += node.textContent || '';
-			} else if (foundSelection) {
-				afterText += node.textContent || '';
-			}
-		}
-		
-		// Find sentence boundaries
-		const sentenceStart = findSentenceStart(beforeText, beforeText.length) + beforeText.length;
-		const sentenceEnd = findSentenceEnd(afterText, 0);
-		
-		text = beforeText + selectedText + afterText;
-		startIdx = sentenceStart;
-		endIdx = beforeText.length + selectedText.length + sentenceEnd;
-		
-		return text.slice(startIdx, endIdx).trim();
+	if (!parent) {
+		return range.toString().trim();
 	}
 	
-	return range.toString().trim();
-}
-
-/**
- * Finds the start of a sentence from a given position.
- * @param {string} text
- * @param {number} offset
- * @returns {number}
- */
-function findSentenceStart(text, offset) {
-	const sentenceEnders = /[.!?]/;
-	let pos = offset;
+	const text = parent.textContent || '';
+	const selectedText = range.toString();
 	
-	while (pos > 0) {
-		if (sentenceEnders.test(text[pos - 1])) {
-			// Skip whitespace after the period
-			while (pos < text.length && /\s/.test(text[pos])) {
-				pos++;
-			}
-			return pos;
-		}
-		pos--;
+	if (!text || !selectedText) {
+		return selectedText.trim();
 	}
 	
-	return 0;
-}
-
-/**
- * Finds the end of a sentence from a given position.
- * @param {string} text
- * @param {number} offset
- * @returns {number}
- */
-function findSentenceEnd(text, offset) {
-	const sentenceEnders = /[.!?]/;
-	let pos = offset;
+	const segments = sentenceSegmenter.segment(text);
 	
-	while (pos < text.length) {
-		if (sentenceEnders.test(text[pos])) {
-			return pos + 1;
+	for (const { segment } of segments) {
+		if (segment.includes(selectedText)) {
+			return segment.trim();
 		}
-		pos++;
 	}
 	
-	return text.length;
+	return selectedText.trim();
 }
 
 // ============================================================================
