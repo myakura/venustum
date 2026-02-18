@@ -233,21 +233,21 @@ function clearHighlight() {
  * @param {string} word
  * @param {string} sentence
  * @param {DictionaryResponse | null} definition
- * @param {{x: number, y: number}} position
+ * @param {DOMRect} selectionRect
  */
-function showPopup(word, sentence, definition, position) {
+function showPopup(word, sentence, definition, selectionRect) {
 	hidePopup();
 	
 	popupElement = document.createElement('div');
 	popupElement.className = `${EXTENSION_ID}-popup`;
+	popupElement.setAttribute('popover', 'auto');
 	popupElement.innerHTML = createPopupContent(word, sentence, definition);
-	
-	popupElement.style.left = `${position.x}px`;
-	popupElement.style.top = `${position.y + 20}px`;
 	
 	document.body.appendChild(popupElement);
 	
-	adjustPopupPosition(popupElement);
+	positionPopup(popupElement, selectionRect);
+	
+	popupElement.showPopover();
 	
 	addPopupEventListeners(popupElement, word, sentence, definition);
 }
@@ -327,27 +327,41 @@ function addPopupEventListeners(popup, word, sentence, definition) {
 	
 	if (closeBtn) {
 		closeBtn.addEventListener('click', () => {
-			hidePopup();
-			clearHighlight();
+			popup.hidePopover();
 		});
 	}
+	
+	popup.addEventListener('toggle', (event) => {
+		if (event.newState === 'closed') {
+			clearHighlight();
+			currentWord = null;
+		}
+	});
 }
 
 /**
- * Adjusts popup position to stay within viewport.
+ * Positions the popup relative to the selection.
  * @param {HTMLElement} popup
+ * @param {DOMRect} selectionRect
  */
-function adjustPopupPosition(popup) {
-	const rect = popup.getBoundingClientRect();
+function positionPopup(popup, selectionRect) {
 	const viewportWidth = window.innerWidth;
 	const viewportHeight = window.innerHeight;
+	
+	let left = selectionRect.left;
+	let top = selectionRect.bottom + 8;
+	
+	popup.style.left = `${left}px`;
+	popup.style.top = `${top}px`;
+	
+	const rect = popup.getBoundingClientRect();
 	
 	if (rect.right > viewportWidth - 10) {
 		popup.style.left = `${viewportWidth - rect.width - 10}px`;
 	}
 	
 	if (rect.bottom > viewportHeight - 10) {
-		popup.style.top = `${parseFloat(popup.style.top) - rect.height - 40}px`;
+		popup.style.top = `${selectionRect.top - rect.height - 8}px`;
 	}
 }
 
@@ -355,8 +369,13 @@ function adjustPopupPosition(popup) {
  * Hides and removes the popup.
  */
 function hidePopup() {
-	if (popupElement && popupElement.parentNode) {
-		popupElement.parentNode.removeChild(popupElement);
+	if (popupElement) {
+		if (popupElement.matches(':popover-open')) {
+			popupElement.hidePopover();
+		}
+		if (popupElement.parentNode) {
+			popupElement.parentNode.removeChild(popupElement);
+		}
 	}
 	popupElement = null;
 }
@@ -528,33 +547,23 @@ async function handleSelection(_event) {
 			return;
 		}
 		
-		// Don't re-process the same word
 		if (info.text === currentWord) return;
 		
 		currentWord = info.text;
 		const sentence = extractSentence(info.range);
 		
-		// Highlight the selection
 		highlightRange(info.range.cloneRange());
 		
-		// Get position for popup
 		const rect = info.range.getBoundingClientRect();
-		const position = {
-			x: rect.left + window.scrollX,
-			y: rect.bottom + window.scrollY,
-		};
 		
-		// Show popup with loading state
-		showPopup(info.text, sentence, null, position);
+		showPopup(info.text, sentence, null, rect);
 		
-		// Fetch definition
 		const definition = await fetchDefinition(info.text.toLowerCase());
 		
-		// Update popup with definition
 		if (popupElement) {
 			popupElement.innerHTML = createPopupContent(info.text, sentence, definition);
 			addPopupEventListeners(popupElement, info.text, sentence, definition);
-			adjustPopupPosition(popupElement);
+			positionPopup(popupElement, rect);
 		}
 	} finally {
 		isProcessingSelection = false;
@@ -570,7 +579,6 @@ async function handleDoubleClick(event) {
 	
 	if (!info) return;
 	
-	// Clear any existing selection
 	const selection = window.getSelection();
 	selection?.removeAllRanges();
 	selection?.addRange(info.range);
@@ -578,57 +586,18 @@ async function handleDoubleClick(event) {
 	currentWord = info.text;
 	const sentence = extractSentence(info.range);
 	
-	// Highlight the word
 	highlightRange(info.range.cloneRange());
 	
-	// Get position for popup
 	const rect = info.range.getBoundingClientRect();
-	const position = {
-		x: rect.left + window.scrollX,
-		y: rect.bottom + window.scrollY,
-	};
 	
-	// Show popup with loading state
-	showPopup(info.text, sentence, null, position);
+	showPopup(info.text, sentence, null, rect);
 	
-	// Fetch definition
 	const definition = await fetchDefinition(info.text.toLowerCase());
 	
-	// Update popup with definition
 	if (popupElement) {
 		popupElement.innerHTML = createPopupContent(info.text, sentence, definition);
 		addPopupEventListeners(popupElement, info.text, sentence, definition);
-		adjustPopupPosition(popupElement);
-	}
-}
-
-/**
- * Handles click events to close popup.
- * @param {MouseEvent} event
- */
-function handleClick(event) {
-	const target = /** @type {Element} */ (event.target);
-	
-	// Don't close if clicking inside popup
-	if (popupElement && popupElement.contains(target)) return;
-	
-	// Don't close if clicking on highlight
-	if (highlightElement && highlightElement.contains(target)) return;
-	
-	hidePopup();
-	clearHighlight();
-	currentWord = null;
-}
-
-/**
- * Handles escape key to close popup.
- * @param {KeyboardEvent} event
- */
-function handleKeydown(event) {
-	if (event.key === 'Escape') {
-		hidePopup();
-		clearHighlight();
-		currentWord = null;
+		positionPopup(popupElement, rect);
 	}
 }
 
@@ -640,21 +609,13 @@ function handleKeydown(event) {
  * Initializes the content script.
  */
 function initialize() {
-	// Use mouseup for selection (with debounce)
 	let selectionTimeout = null;
 	document.addEventListener('mouseup', () => {
 		if (selectionTimeout) clearTimeout(selectionTimeout);
 		selectionTimeout = setTimeout(() => handleSelection(null), 100);
 	});
 	
-	// Double-click for single words
 	document.addEventListener('dblclick', handleDoubleClick);
-	
-	// Click to close popup
-	document.addEventListener('click', handleClick);
-	
-	// Escape to close popup
-	document.addEventListener('keydown', handleKeydown);
 	
 	console.log(`${EXTENSION_ID}: content script loaded`);
 }
