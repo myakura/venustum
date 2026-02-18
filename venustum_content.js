@@ -200,14 +200,10 @@ function highlightRange(range) {
 	try {
 		highlightElement = document.createElement('span');
 		highlightElement.className = `${EXTENSION_ID}-highlight`;
-		highlightElement.style.backgroundColor = 'rgba(255, 235, 59, 0.4)';
-		highlightElement.style.borderRadius = '2px';
-		highlightElement.style.transition = 'background-color 0.2s';
 		
 		range.surroundContents(highlightElement);
 		currentRange = range;
 	} catch (error) {
-		// Range spans multiple elements - use CSS highlight instead
 		console.log(`${EXTENSION_ID}: cannot surround contents, using fallback`);
 		highlightElement = null;
 	}
@@ -246,35 +242,13 @@ function showPopup(word, sentence, definition, position) {
 	popupElement.className = `${EXTENSION_ID}-popup`;
 	popupElement.innerHTML = createPopupContent(word, sentence, definition);
 	
-	// Apply styles
-	Object.assign(popupElement.style, {
-		position: 'absolute',
-		left: `${position.x}px`,
-		top: `${position.y + 20}px`,
-		maxWidth: '400px',
-		background: '#fff',
-		border: '1px solid #ddd',
-		borderRadius: '8px',
-		boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-		padding: '12px',
-		fontFamily: 'system-ui, -apple-system, sans-serif',
-		fontSize: '14px',
-		zIndex: '2147483647',
-		lineHeight: '1.5',
-	});
-	
-	// Add custom styles for popup content
-	const style = popupElement.querySelector('style');
-	if (style) {
-		document.head.appendChild(style);
-	}
+	popupElement.style.left = `${position.x}px`;
+	popupElement.style.top = `${position.y + 20}px`;
 	
 	document.body.appendChild(popupElement);
 	
-	// Adjust position if popup goes off screen
 	adjustPopupPosition(popupElement);
 	
-	// Add event listeners
 	addPopupEventListeners(popupElement, word, sentence, definition);
 }
 
@@ -289,26 +263,24 @@ function createPopupContent(word, sentence, definition) {
 	const escapedWord = escapeHtml(word);
 	const escapedSentence = escapeHtml(sentence);
 	
-	let definitionHtml = '<p style="color: #666; margin: 8px 0;">Loading definition...</p>';
+	let definitionHtml = `<p class="${EXTENSION_ID}-popup-loading">Loading definition...</p>`;
 	
 	if (definition) {
 		definitionHtml = definition.meanings.map(meaning => {
 			const defs = meaning.definitions.slice(0, 2).map((def, i) => {
-				let html = `<div style="margin: 4px 0;">
-					<span style="color: #666;">${i + 1}.</span> ${escapeHtml(def.definition)}
+				let html = `<div class="${EXTENSION_ID}-popup-def">
+					<span class="${EXTENSION_ID}-popup-def-num">${i + 1}.</span> ${escapeHtml(def.definition)}
 				</div>`;
 				if (def.example) {
-					html += `<div style="margin-left: 16px; color: #888; font-style: italic;">
+					html += `<div class="${EXTENSION_ID}-popup-example">
 						"${escapeHtml(def.example)}"
 					</div>`;
 				}
 				return html;
 			}).join('');
 			
-			return `<div style="margin: 8px 0;">
-				<span style="background: #e3f2fd; padding: 2px 6px; border-radius: 4px; font-size: 12px;">
-					${escapeHtml(meaning.partOfSpeech)}
-				</span>
+			return `<div class="${EXTENSION_ID}-popup-meaning">
+				<span class="${EXTENSION_ID}-popup-pos">${escapeHtml(meaning.partOfSpeech)}</span>
 				${defs}
 			</div>`;
 		}).join('');
@@ -317,35 +289,19 @@ function createPopupContent(word, sentence, definition) {
 	const phonetic = definition?.phonetic || '';
 	
 	return `
-		<div style="margin-bottom: 8px;">
-			<span style="font-size: 18px; font-weight: 600;">${escapedWord}</span>
-			${phonetic ? `<span style="color: #666; margin-left: 8px;">${escapeHtml(phonetic)}</span>` : ''}
+		<div class="${EXTENSION_ID}-popup-header">
+			<span class="${EXTENSION_ID}-popup-word">${escapedWord}</span>
+			${phonetic ? `<span class="${EXTENSION_ID}-popup-phonetic">${escapeHtml(phonetic)}</span>` : ''}
 		</div>
-		<div style="margin-bottom: 12px;">
+		<div class="${EXTENSION_ID}-popup-definitions">
 			${definitionHtml}
 		</div>
-		<div style="background: #f5f5f5; padding: 8px; border-radius: 4px; font-size: 13px; margin-bottom: 12px;">
+		<div class="${EXTENSION_ID}-popup-sentence">
 			${escapedSentence}
 		</div>
-		<div style="display: flex; gap: 8px;">
-			<button class="${EXTENSION_ID}-save-btn" style="
-				flex: 1;
-				background: #1976d2;
-				color: white;
-				border: none;
-				padding: 8px 12px;
-				border-radius: 4px;
-				cursor: pointer;
-				font-size: 13px;
-			">Save to vocabulary</button>
-			<button class="${EXTENSION_ID}-close-btn" style="
-				background: #f5f5f5;
-				border: 1px solid #ddd;
-				padding: 8px 12px;
-				border-radius: 4px;
-				cursor: pointer;
-				font-size: 13px;
-			">Close</button>
+		<div class="${EXTENSION_ID}-popup-actions">
+			<button class="${EXTENSION_ID}-save-btn">Save to vocabulary</button>
+			<button class="${EXTENSION_ID}-close-btn">Close</button>
 		</div>
 	`;
 }
@@ -365,7 +321,6 @@ function addPopupEventListeners(popup, word, sentence, definition) {
 		saveBtn.addEventListener('click', () => {
 			saveEntry(word, sentence, definition);
 			saveBtn.textContent = 'Saved!';
-			saveBtn.style.background = '#4caf50';
 			saveBtn.disabled = true;
 		});
 	}

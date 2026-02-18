@@ -1,0 +1,113 @@
+.venustum-highlight {
+	background-color: rgba(255, 235, 59, 0.4);
+	border-radius: 2px;
+	transition: background-color 0.2s;
+}
+
+.venustum-popup {
+	position: absolute;
+	max-width: 400px;
+	background: #fff;
+	border: 1px solid #ddd;
+	border-radius: 8px;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+	padding: 12px;
+	font-family: system-ui, -apple-system, sans-serif;
+	font-size: 14px;
+	z-index: 2147483647;
+	line-height: 1.5;
+}
+
+.venustum-popup-header {
+	margin-bottom: 8px;
+}
+
+.venustum-popup-word {
+	font-size: 18px;
+	font-weight: 600;
+}
+
+.venustum-popup-phonetic {
+	color: #666;
+	margin-left: 8px;
+}
+
+.venustum-popup-definitions {
+	margin-bottom: 12px;
+}
+
+.venustum-popup-loading {
+	color: #666;
+	margin: 8px 0;
+}
+
+.venustum-popup-meaning {
+	margin: 8px 0;
+}
+
+.venustum-popup-pos {
+	background: #e3f2fd;
+	padding: 2px 6px;
+	border-radius: 4px;
+	font-size: 12px;
+}
+
+.venustum-popup-def {
+	margin: 4px 0;
+}
+
+.venustum-popup-def-num {
+	color: #666;
+}
+
+.venustum-popup-example {
+	margin-left: 16px;
+	color: #888;
+	font-style: italic;
+}
+
+.venustum-popup-sentence {
+	background: #f5f5f5;
+	padding: 8px;
+	border-radius: 4px;
+	font-size: 13px;
+	margin-bottom: 12px;
+}
+
+.venustum-popup-actions {
+	display: flex;
+	gap: 8px;
+}
+
+.venustum-save-btn {
+	flex: 1;
+	background: #1976d2;
+	color: white;
+	border: none;
+	padding: 8px 12px;
+	border-radius: 4px;
+	cursor: pointer;
+	font-size: 13px;
+}
+
+.venustum-save-btn:hover {
+	background: #1565c0;
+}
+
+.venustum-save-btn:disabled {
+	background: #4caf50;
+	cursor: default;
+}
+
+.venustum-close-btn {
+	background: #f5f5f5;
+	border: 1px solid #ddd;
+	padding: 8px 12px;
+	border-radius: 4px;
+	cursor: pointer;
+	font-size: 13px;
+}
+
+.venustum-close-btn:hover {
+	background: #e0e0e0;
+}
