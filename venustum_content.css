@@ -106,6 +106,7 @@
 	border-radius: 4px;
 	cursor: pointer;
 	font-size: 13px;
+	color: #333;
 }
 
 .venustum-close-btn:hover {
