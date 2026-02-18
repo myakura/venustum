@@ -23,6 +23,7 @@
 	position-anchor: --venustum-selection;
 	top: anchor(bottom);
 	left: anchor(left);
+	margin-block: 8px;
 	position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;
 }
 
