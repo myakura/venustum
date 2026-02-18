@@ -339,6 +339,21 @@ function addPopupEventListeners(popup, word, sentence, definition) {
 	});
 }
 
+/**
+ * Hides and removes the popup.
+ */
+function hidePopup() {
+	if (popupElement) {
+		if (popupElement.matches(':popover-open')) {
+			popupElement.hidePopover();
+		}
+		if (popupElement.parentNode) {
+			popupElement.parentNode.removeChild(popupElement);
+		}
+	}
+	popupElement = null;
+}
+
 // ============================================================================
 // Data Operations
 // ============================================================================
